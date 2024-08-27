@@ -34,13 +34,18 @@ const filteredTasks = computed(()=>{
   return tasks.value.slice(0,3)
 })
 const loadProjects = ()=>{
+  project.value = {
+    name: null,
+    description: null,
+    user_id: user.id
+  }
   let toast = useToast()
   loading.value = true
   projectService.projects().then((r)=>{
     toast.success("Проекты успешно взяты")
     projects.value = r.data
     projects.value.forEach((item)=>{
-      tasks.value.concat(item.tasks)
+      tasks.value = tasks.value.concat(item.tasks)
       item.task = {
         name: null,
         description: null,
@@ -54,9 +59,23 @@ const loadProjects = ()=>{
     loading.value = false
   })
 }
-const loadProject = ()=>{
-  projectService.create(project.value).then((r)=>{
+const loadProject = (project_id)=>{
+  let toast = useToast()
+  projectService.get(project_id).then((r)=>{
+    let project = r.data
+    tasks.value = tasks.value.filter((item)=>item.project_id !== project.id)
+    tasks.value = tasks.value.concat(project.tasks)
+    projects.value = projects.value.filter((item)=>item.id !== project.id)
+    project.task = {
+      name: null,
+      description: null,
+      user_id: user.id,
+      status: "backlog",
+    }
+    projects.value.push(project)
+    projects.value.sort((a,b)=>b.id-a.id)
   }).catch(r=>{
+    console.log(r)
     toast.error(r.response.data.message)
   })
 }
@@ -65,15 +84,25 @@ const createProject = ()=>{
   projectService.create(project.value).then((r)=>{
     toast.success("Проект успешно добавлен")
     loadProjects()
+
   }).catch(r=>{
     toast.error(r.response.data.message)
   })
 }
 const createTask = (project)=>{
   let toast = useToast()
-  projectService.createTask(project.id, project.task).then((r)=>{
+  projectService.createTask(project.id, project.task).then(()=>{
     toast.success("Задача успешно добавлена")
     loadProject(project.id)
+  }).catch(r=>{
+    toast.error(r.response.data.message)
+  })
+}
+const deleteTask = (project_id, task_id)=>{
+  let toast = useToast()
+  projectService.deleteTask(project_id, task_id).then(()=>{
+    toast.success("Задача успешно удалена")
+    loadProject(project_id)
   }).catch(r=>{
     toast.error(r.response.data.message)
   })
@@ -122,18 +151,25 @@ onMounted(()=>loadProjects())
         <template #text>
           <div>
           <VDivider/>
-            <v-list lines="two" v-if="pr.tasks.length">
+            <div v-if="pr.tasks.length">
+              <h4 class="text-md">Задачи</h4>
+            <v-list lines="two" >
               <v-list-item
                   v-for="task in pr.tasks"
                   :key="task.id"
                   :title="task.name"
                   :subtitle="task.description"
-              ></v-list-item>
+              >
+                <template #append>
+                  <VBtn  icon="mdi-trash-can"
+                         variant="text" color="error" @click="deleteTask(pr.id, task.id)"/>
+                </template>
+              </v-list-item>
             </v-list>
+            </div>
             <p v-else class="text-center text-gray-500 mb-4">Нет задач</p>
-            <VDivider color="black"/>
             <h5 class="text-lg">Добавить задачу</h5>
-            <v-form @submit="createTask(pr)">
+            <v-form @submit.prevent="createTask(pr)">
               <v-text-field density="compact"
                   v-model="pr.task.name"
                   label="Название"
@@ -155,15 +191,18 @@ onMounted(()=>loadProjects())
       </v-expansion-panel>
     </v-expansion-panels>
     <p v-else class="text-center text-gray-500 text-xl">Нет проектов</p>
-    <div v-if="filteredTasks.length">
+    <div v-if="filteredTasks.length" class="mt-4">
       <h4 class="text-xl">Последние задачи</h4>
-      <v-list lines="one" >
+      <VCard>
+      <v-list lines="one">
         <v-list-item
             v-for="task in filteredTasks"
             :key="task.id"
             :title="task.name"
+            :subtitle="(new Date(task.created_at)).toLocaleDateString()"
         />
       </v-list>
+      </VCard>
     </div>
   </div>
 </template>
